@@ -1,0 +1,13 @@
+Resources:
+  ApiGatewayAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    DependsOn:
+      - ApiGatewayRestApi
+    Properties:
+      IdentitySource: method.request.header.Authorization
+      Name: Cognito
+      RestApiId:
+        Ref: ApiGatewayRestApi
+      Type: COGNITO_USER_POOLS
+      ProviderARNs:
+        - {Fn::GetAtt: [ApiGatewayWithAuthorizationUserPool, Arn]}

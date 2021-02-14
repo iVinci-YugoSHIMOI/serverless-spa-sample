@@ -1,0 +1,16 @@
+Resources:
+  ExampleTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${self:service}_${self:provider.stage}_example
+      AttributeDefinitions:
+        - AttributeName: date
+          AttributeType: S
+      KeySchema:
+        - AttributeName: date
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      SSESpecification:
+        SSEEnabled: True

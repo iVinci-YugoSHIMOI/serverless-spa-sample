@@ -1,0 +1,115 @@
+Resources:
+  WebStatic:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: ${self:service}-${self:provider.stage}-ui
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  PolicyWebStatic:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebStatic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource: !Sub '${WebStatic.Arn}/*'
+            Principal:
+              CanonicalUser: !GetAtt CloudFrontOriginAccessIdentity.S3CanonicalUserId
+
+  CloudFrontOriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: 'CloudFront OAI ${self:service}-${self:provider.stage}'
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName:
+              !Join [
+                '',
+                [!Ref WebStatic, !Sub '.s3-${AWS::Region}.amazonaws.com'],
+              ]
+            Id: S3-${self:service}-${self:provider.stage}-ui
+            S3OriginConfig:
+              OriginAccessIdentity:
+                !Join [
+                  '',
+                  [
+                    'origin-access-identity/cloudfront/',
+                    !Ref CloudFrontOriginAccessIdentity,
+                  ],
+                ]
+          - DomainName:
+              Fn::Join:
+                - ''
+                # ApiGatewayを動的取得
+                - - Ref: ApiGatewayRestApi
+                  - '.execute-api.'
+                  - Ref: AWS::Region
+                  - '.amazonaws.com'
+            Id: ApiOrigin
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          DefaultTTL: 0
+          MaxTTL: 0
+          TargetOriginId: S3-${self:service}-${self:provider.stage}-ui
+          ViewerProtocolPolicy: redirect-to-https
+          ForwardedValues:
+            QueryString: false
+        CacheBehaviors:
+          - PathPattern: /${self:provider.stage}/*
+            TargetOriginId: ApiOrigin
+            ForwardedValues:
+              QueryString: false
+              # 重要。ここの設定を漏らすとCOGNITO認証に失敗する
+              Headers:
+                - Authorization
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - DELETE
+              - GET
+              - HEAD
+              - OPTIONS
+              - PATCH
+              - POST
+              - PUT
+            MinTTL: 0
+            DefaultTTL: 0
+
+        Enabled: true
+        HttpVersion: http2
+        # 重要。ここの設定を漏らすとSPAアプリケーションの画面遷移時に表示が帰ってこない
+        DefaultRootObject: index.html
+        CustomErrorResponses:
+          - ErrorCachingMinTTL: 0
+            ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /
+
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+Outputs:
+  WebStaticName:
+    Description: 'S3 Bucket for Deploying static site'
+    Value: !Ref WebStatic
+  CloudFrontDomainName:
+    Description: 'Cloudfront DomainName.'
+    Value: !GetAtt CloudFrontDistribution.DomainName
